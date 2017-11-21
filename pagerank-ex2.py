@@ -191,7 +191,11 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
 
             linkSum = 0
             for edge in edges:
-                linkSum = linkSum + pageRankDict[edge[0]] / len(invertedGraph[edge[0]])
+                edgeSum = 0
+                for edge2 in invertedGraph[edge[0]]:
+                    edgeSum = edgeSum + edge2[1]
+
+                linkSum = linkSum + ((pageRankDict[edge[0]] * edge[1]) / edgeSum)
 
             priorProbability = (prior[node]/sum(prior.values()))
             rank = dampingFactor * priorProbability + (1 - dampingFactor) * linkSum
@@ -217,7 +221,7 @@ def generatePositionPrior(tfidfMatrix):
     N = len(tfidfMatrix)
     for pos in tfidfMatrix.keys():
         # smoothing goes here:
-        prior[pos] = (pos + 1) / N
+        prior[pos] = N / (pos + 1)
 
     return prior
 
@@ -240,8 +244,9 @@ corpus = sent_tokenize(text)
 
 tfidfMatrix = simpleTfIdf(corpus)
 
-prior = generatePriorUnifrom(tfidfMatrix)
-simGraph = buildSimilarityGraph(tfidfMatrix, 0.14)
+#prior = generatePriorUnifrom(tfidfMatrix)
+prior = generatePositionPrior(tfidfMatrix)
+simGraph = buildSimilarityGraph(tfidfMatrix, 0.2)
 
 pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
 
