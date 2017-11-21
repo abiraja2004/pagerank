@@ -165,16 +165,18 @@ def buildSimilarityGraph(tfidfMatrix, threshold):
             vectorB = tfidfMatrix[key2]
             sim = cosineSimilarity(vectorA, vectorB)
             if sim > threshold:
-                graph[key].append(key2)
+                graph[key].append((key2,sim))
+                #graph[key].append(key2)
 
     return graph
 
 
-def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
+def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
     pageRankDict = {}
     allIterations = []
     allDiffIterations = []
-    invertedGraph = invertGraph(linkGraphDict)
+    #invertedGraph = invertGraph(linkGraphDict)
+    invertedGraph = linkGraphDict;
 
     N = len(linkGraphDict.keys())
 
@@ -185,13 +187,14 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
     for iteration in range(numberOfIterations):
         pageRankCurIteration = {}
 
-        for node, values in linkGraphDict.items():
+        for node, edges in linkGraphDict.items():
 
             linkSum = 0
-            for linkFromNode in values:
-                linkSum = linkSum + pageRankDict[linkFromNode] / len(invertedGraph[linkFromNode])
+            for edge in edges:
+                linkSum = linkSum + pageRankDict[edge[0]] / len(invertedGraph[edge[0]])
 
-            rank = (dampingFactor / N) + (1 - dampingFactor) * linkSum
+            priorProbability = (prior[node]/sum(prior.values()))
+            rank = dampingFactor * priorProbability + (1 - dampingFactor) * linkSum
             pageRankCurIteration[node] = rank
 
         diffDict = compareDifferenceDict(pageRankDict, pageRankCurIteration)
@@ -212,12 +215,21 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
 def generatePositionPrior(tfidfMatrix):
     prior = {}
     N = len(tfidfMatrix)
-    for pos in enumerate(tfidfMatrix):
+    for pos in tfidfMatrix.keys():
         # smoothing goes here:
         prior[pos] = (pos + 1) / N
 
     return prior
 
+
+def generatePriorUnifrom(tfidfMatrix):
+    prior = {}
+    N = len(tfidfMatrix)
+    for node in tfidfMatrix.keys():
+        # smoothing goes here:
+        prior[node] =  1
+
+    return prior
 
 #def generateSimpleWeightMatrix():
 
@@ -228,11 +240,10 @@ corpus = sent_tokenize(text)
 
 tfidfMatrix = simpleTfIdf(corpus)
 
-prior = generatePositionPrior(tfidfMatrix)
-#weightMatrix = generateSimpleWeightMatrix()
-simGraph = buildSimilarityGraph(tfidfMatrix, 0.2)
+prior = generatePriorUnifrom(tfidfMatrix)
+simGraph = buildSimilarityGraph(tfidfMatrix, 0.14)
 
-pageRankRes = pageRank(simGraph, 0.15, 1000)
+pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
 
 sortedList = sorted(pageRankRes.items(), key=lambda x: x[1], reverse=True)
 top5Results = sortedList[:5]
