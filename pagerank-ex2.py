@@ -1,16 +1,43 @@
 from collections import Counter
 import math
 import numpy
+import glob
+import re
 from numpy import linalg
+from enum import Enum
 from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize import sent_tokenize
 
 
-def readTextFile(filename):
-    file = open(filename, "r")
-    textData = file.read()
-    return textData
+class WeightMethod(Enum):
+    UNIFORM = 1
+    TFIDF = 2
 
+
+class PriorMethod(Enum):
+    UNIFORM = 1
+    POSITION = 2
+
+
+def readAllTextFiles(pathToFiles):
+    files = glob.glob(pathToFiles + "/*.txt")
+    documentTextList = []
+    # iterate over the list getting each file
+    for file in files:
+        corpus = []
+        # open the file and then call .read() to get the text
+        f = open(file)
+        text = f.read()
+
+        text = text.lower()
+
+        # remove newline :
+        cText = re.sub('[a-z]\n', '. ', text)
+
+        documentTextList.append(cText)
+        f.close()
+
+    return documentTextList
 
 def cosineSimilarity(vectorA, vectorB):
     dotResult = numpy.dot(vectorA, vectorB)
@@ -149,7 +176,7 @@ def checkConvergence(diffDict, epsilon):
     return True
 
 
-def buildSimilarityGraph(tfidfMatrix, threshold):
+def buildSimilarityGraph(tfidfMatrix, threshold, isWeighted=True):
     graph = {}
     for key in tfidfMatrix.keys():
         graph[key] = []
@@ -165,8 +192,10 @@ def buildSimilarityGraph(tfidfMatrix, threshold):
             vectorB = tfidfMatrix[key2]
             sim = cosineSimilarity(vectorA, vectorB)
             if sim > threshold:
-                graph[key].append((key2,sim))
-                #graph[key].append(key2)
+                if isWeighted:
+                    graph[key].append((key2,sim))
+                else:
+                    graph[key].append((key2, 1.0))
 
     return graph
 
@@ -235,25 +264,94 @@ def generatePriorUnifrom(tfidfMatrix):
 
     return prior
 
-#def generateSimpleWeightMatrix():
+def evaluateResults(relevantDocument, retrievedDocuments):
+    correctFetchedDocs = 0
+    averagePrecision = 0
+    relevantDocuments = sent_tokenize(relevantDocument)
 
+    for count,retrievedDoc in enumerate(retrievedDocuments):
+        if retrievedDoc in relevantDocuments:
+            correctFetchedDocs += 1
+            averagePrecision += correctFetchedDocs / (count + 1)
 
-pathToTextFile = "po96fe28-a.txt"
-text = readTextFile(pathToTextFile)
-corpus = sent_tokenize(text)
+    averagePrecision = averagePrecision / len(relevantDocuments)
+    precision = correctFetchedDocs / len(retrievedDocuments)
+    recall = correctFetchedDocs / len(relevantDocuments)
 
-tfidfMatrix = simpleTfIdf(corpus)
+    if (precision + recall) != 0:
+        f1 = (2 * precision * recall) / (precision + recall)
+    else:
+        f1 = 0.0
 
-#prior = generatePriorUnifrom(tfidfMatrix)
-prior = generatePositionPrior(tfidfMatrix)
-simGraph = buildSimilarityGraph(tfidfMatrix, 0.2)
+    return precision, recall, f1, averagePrecision
 
-pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
+def printEvaluationSummary(evaluationSummary, methodName):
+    map = 0
+    avgPrecision = 0
+    avgRecall = 0
+    avgF1 = 0
+    for evaluatedQuery in evaluationSummary:
+        map += evaluatedQuery[3]
+        avgF1 += evaluatedQuery[2]
+        avgRecall += evaluatedQuery[1]
+        avgPrecision += evaluatedQuery[0]
 
-sortedList = sorted(pageRankRes.items(), key=lambda x: x[1], reverse=True)
-top5Results = sortedList[:5]
-top5Results = sorted(top5Results, key=lambda x: x[0])
+    map = map / len(evaluationSummary)
+    avgF1 = avgF1 / len(evaluationSummary)
+    avgRecall = avgRecall / len(evaluationSummary)
+    avgPrecision = avgPrecision / len(evaluationSummary)
 
-for result in top5Results:
-    print(corpus[result[0]])
+    print(methodName)
+    print("MAP: " + str(map))
+    print("Avg precision: " + str(avgPrecision))
+    print("Avg recall: " + str(avgRecall))
+    print("Avg f1: " + str(avgF1))
     print()
+
+
+def summarizeDocument(text, edgeWeightMethod, priorMethod):
+    corpus = sent_tokenize(text)
+
+    tfidfMatrix = simpleTfIdf(corpus)
+
+    if priorMethod == PriorMethod.UNIFORM:
+        prior = generatePriorUnifrom(tfidfMatrix)
+    if priorMethod == PriorMethod.POSITION:
+        prior = generatePositionPrior(tfidfMatrix)
+
+    if edgeWeightMethod == WeightMethod.UNIFORM:
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.2, False)
+    if edgeWeightMethod == WeightMethod.TFIDF:
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.2, True)
+
+
+    pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
+
+    sortedList = sorted(pageRankRes.items(), key=lambda x: x[1], reverse=True)
+    top5Results = sortedList[:5]
+    top5Results = sorted(top5Results, key=lambda x: x[0])
+
+    summarizedResult = []
+    for result in top5Results:
+        summarizedResult.append(corpus[result[0]])
+
+    return summarizedResult
+
+
+def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weightMethod, uniformMethod):
+    evaluationSummary = []
+
+    for idx, document in enumerate(allDocuments):
+        summarizedDocument = summarizeDocument(document, weightMethod, uniformMethod)
+        precision, recall, f1, ap = evaluateResults(allIdealDocuments[idx], summarizedDocument)
+        evaluationSummary.append((precision, recall, f1, ap))
+
+    printEvaluationSummary(evaluationSummary, methodName)
+
+
+allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
+allIdealDocuments = readAllTextFiles("./TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+
+
+evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
