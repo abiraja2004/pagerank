@@ -98,6 +98,7 @@ def generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet):
     # generate vocabulary and term count per document
     for sentence in documentCorpus:
         normalizedWordCount = generateDocumentVector(sentence)
+        #normalizedWordCount = generateDocumentVectorImproved(sentence, True)
         vocabularySet.update(normalizedWordCount.keys())
         documentWordCounts.append(normalizedWordCount)
 
@@ -180,6 +181,20 @@ def checkConvergence(diffDict, epsilon):
             return False
 
     return True
+
+def generateTfIdfArray(document, vocabulary, globalWordCount, documentN):
+    normalizedWordCount = generateDocumentVector(document)
+    tfArray = calcTfArray(normalizedWordCount, vocabulary)
+    docTfIdfArray = calcTfIdfArray(tfArray, vocabulary, globalWordCount, documentN)
+    return docTfIdfArray
+
+def compareSimilarity(docTfIdfArray, tfidfMatrix):
+    simResults = {}
+    for idx, tfidfArray in tfidfMatrix.items():
+        sim = cosineSimilarity(docTfIdfArray, tfidfArray)
+        simResults[idx] = sim
+
+    return simResults
 
 
 def buildSimilarityGraph(tfidfMatrix, threshold, isWeighted=True):
@@ -308,8 +323,6 @@ def generateBayesPrior(text):
 
     queryTf = generateDocumentVectorImproved(text)
 
-    probDocScores = []
-
     for idx, documentTf in enumerate(documentTfMatrix):
         probQuery = 0
         docLength = sum(documentTf.values())
@@ -327,7 +340,25 @@ def generateBayesPrior(text):
 def generateTfIdfPrior(text):
     prior = {}
 
+    vocabularySet = set()
+    termInDocuments = {}
+    documentCorpus = sent_tokenize(text)
 
+    # count of sentences (used in idf calculation)
+    documentN = len(documentCorpus)
+
+    documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
+    vocabulary = list(vocabularySet)
+
+    generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
+
+    tfMatrix = generateTfMatrixPerDocument(documentsWordCounts, vocabulary)
+
+    # generate tfidf array for each sentence:
+    tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
+
+    queryTfIdfArray = generateTfIdfArray(text, vocabulary, termInDocuments, documentN)
+    prior = compareSimilarity(queryTfIdfArray, tfidfMatrix)
 
     return prior
 
@@ -424,8 +455,9 @@ def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weigh
 
 
 allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
-allIdealDocuments = readAllTextFiles("./TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
-#evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
-#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)
