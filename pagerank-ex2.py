@@ -3,10 +3,12 @@ import math
 import numpy
 import glob
 import re
+import nltk
 from numpy import linalg
 from enum import Enum
 from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
 
 
 class WeightMethod(Enum):
@@ -17,6 +19,8 @@ class WeightMethod(Enum):
 class PriorMethod(Enum):
     UNIFORM = 1
     POSITION = 2
+    TFIDF = 3
+    BAYES = 4
 
 
 def readAllTextFiles(pathToFiles):
@@ -147,6 +151,8 @@ def simpleTfIdf(documentCorpus):
     return tfidfMatrix
 
 
+
+
 def invertGraph(graph):
     invertedGraph = {}
 
@@ -255,7 +261,7 @@ def generatePositionPrior(tfidfMatrix):
     return prior
 
 
-def generatePriorUnifrom(tfidfMatrix):
+def generateUniformPrior(tfidfMatrix):
     prior = {}
     N = len(tfidfMatrix)
     for node in tfidfMatrix.keys():
@@ -263,6 +269,68 @@ def generatePriorUnifrom(tfidfMatrix):
         prior[node] =  1
 
     return prior
+
+def generateDocumentVectorImproved(document, normalize = False):
+    tokenizer = RegexpTokenizer(r'\w+')
+
+    stop_words = set(stopwords.words("portuguese"))
+    tokens = tokenizer.tokenize(document)
+
+    filterd_tokens = []
+    for token in tokens:
+        if token not in stop_words:
+            token = token.lower()
+            filterd_tokens.append(token)
+
+    filteredAndStemmedTokens = []
+    stemmer = nltk.stem.RSLPStemmer()
+    for token in filterd_tokens:
+        stemmed = stemmer.stem(token)
+        filteredAndStemmedTokens.append(stemmed)
+
+    wordCount = Counter(filteredAndStemmedTokens)
+
+    if normalize == True:
+        wordCount = normalizeTermFrequency(wordCount)
+
+    return wordCount
+
+def generateBayesPrior(text):
+    prior = {}
+
+    documentCorpus = sent_tokenize(text)
+    docCount = len(documentCorpus)
+    documentTfMatrix = []
+
+    for document in documentCorpus:
+        documentTf = generateDocumentVectorImproved(document)
+        documentTfMatrix.append(documentTf)
+
+    queryTf = generateDocumentVectorImproved(text)
+
+    probDocScores = []
+
+    for idx, documentTf in enumerate(documentTfMatrix):
+        probQuery = 0
+        docLength = sum(documentTf.values())
+
+        for queryTerm, queryTF in queryTf.items():
+            docTF = documentTf.get(queryTerm,0)
+            probDoc = math.pow(((docTF + 1) / (docLength+1)), queryTF)
+            probQuery = probQuery + math.log(1/docCount) + math.log(probDoc)
+
+        prior[idx] = probQuery
+
+    return prior
+
+
+def generateTfIdfPrior(text):
+    prior = {}
+
+
+
+    return prior
+
 
 def evaluateResults(relevantDocument, retrievedDocuments):
     correctFetchedDocs = 0
@@ -284,6 +352,8 @@ def evaluateResults(relevantDocument, retrievedDocuments):
         f1 = 0.0
 
     return precision, recall, f1, averagePrecision
+
+
 
 def printEvaluationSummary(evaluationSummary, methodName):
     map = 0
@@ -315,14 +385,18 @@ def summarizeDocument(text, edgeWeightMethod, priorMethod):
     tfidfMatrix = simpleTfIdf(corpus)
 
     if priorMethod == PriorMethod.UNIFORM:
-        prior = generatePriorUnifrom(tfidfMatrix)
+        prior = generateUniformPrior(tfidfMatrix)
     if priorMethod == PriorMethod.POSITION:
         prior = generatePositionPrior(tfidfMatrix)
+    if priorMethod == PriorMethod.TFIDF:
+        prior = generateTfIdfPrior(text)
+    if priorMethod == PriorMethod.BAYES:
+        prior = generateBayesPrior(text)
 
     if edgeWeightMethod == WeightMethod.UNIFORM:
-        simGraph = buildSimilarityGraph(tfidfMatrix, 0.2, False)
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
     if edgeWeightMethod == WeightMethod.TFIDF:
-        simGraph = buildSimilarityGraph(tfidfMatrix, 0.2, True)
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, True)
 
 
     pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
@@ -352,6 +426,6 @@ def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weigh
 allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
 allIdealDocuments = readAllTextFiles("./TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
-
-evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
-evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
+#evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
+#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
