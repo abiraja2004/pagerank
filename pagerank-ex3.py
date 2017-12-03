@@ -369,25 +369,34 @@ def generateTrainingFeatureVector(text, idealText):
     pageRankFeatures = generatePageRankScore(text)
 
     for idx in range(len(positionFeatures)):
-        documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
+        #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
+        #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
+        documentFeatureVector.append(([tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
 
     return documentFeatureVector
 
 def predictModel(features, weights):
-    output = 0
-    for feature, weight in features, weights:
-        output =+ feature * weight
+    output = 0.0
+    for (feature, weight) in zip(features, weights):
+        output = output + feature * weight
 
-    if output >= 0:
-        return 1.0
-    else:
-        return 0.0
+    #sigmoid:
+    output = 1.0 / (1.0 + math.exp(-output))
+
+    return output
+
+def predictModelVal(features, weights):
+        output = 0
+        for feature, weight in features, weights:
+            output = + feature * weight
+
+        return output
 
 def adjustWeights(weights, features, output, target):
 
     adjustedWeights = []
 
-    for weight, feature in weights, features:
+    for (weight, feature) in zip(weights, features):
         newWeight = weight + (target - output)*feature
         adjustedWeights.append(newWeight)
 
@@ -396,14 +405,21 @@ def adjustWeights(weights, features, output, target):
 def perceptronModel(trainingFeatures, testFeatures):
 
     weights = trainModel(trainingFeatures)
+    predictionList = []
+
+    for testFeature in testFeatures:
+        predictionValue = predictModelVal(testFeature, weights)
+        predictionList.append(predictionValue)
+
+    return predictionList
 
 def trainModel(trainingFeatures):
 
     mse = 999
 
     #add bias to feature vectors
-    for featureRow in trainingFeatures:
-        featureRow.insert(0, 1.0)
+    #for featureRow in trainingFeatures:
+     #   featureRow[0].insert(0, 1.0)
 
     featuresCount = len(trainingFeatures[0][0])
 
@@ -411,31 +427,56 @@ def trainModel(trainingFeatures):
     weights = []
     for idx in range(featuresCount):
         weights.append(random.random())
+    #weights.append(0.0)
 
+    epochs = 0
     #train model:
-    while (mse-0.001) > 0.0001:
+    while (math.fabs(mse-0.001)) > 0.0001:
         mse = 0.0
         error = 0.0
 
-        for trainingRow in trainingFeatures:
+        for featureRow in trainingFeatures:
+            output = predictModel(featureRow[0], weights)
+            error = error + math.fabs(output - featureRow[1])
+            weights = adjustWeights(weights, featureRow[0], output, featureRow[1])
 
-            output = predictModel(trainingRow, weights)
-            error += math.fabs(output - trainingRow[1])
-            weights = adjustWeights(weights, trainingRow, output, trainingRow[1])
+        mse = error / len(trainingFeatures)
+        epochs += 1
+        print("The mean square error of "+  str(epochs) + " epoch is "+ str(mse));
 
-        mse = error / featuresCount
-
-
-
-allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
-allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
-
-allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
-allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
-
-featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
-featureVecTest = generateFeatureDocuments(allDocumentsTest)
+    return weights
 
 
 
-print("test")
+#allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
+#allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
+
+#allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
+#allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+
+#featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
+#featureVecTest = generateFeatureDocuments(allDocumentsTest)
+
+#perceptronModel(featureVecTraining, featureVecTest)
+
+#blue = 1
+#red = 0
+trainindData = []
+trainindData.append(([0,0,0.00392*255],1))
+trainindData.append(([0,0,0.00392*192],1))
+trainindData.append(([0.00392*243,0.00392*80,0.00392*59],0))
+trainindData.append(([0.00392*255,0,0.00392*77],0))
+trainindData.append(([0.00392*77,0.00392*93,0.00392*190],1))
+trainindData.append(([0.00392*255,0.00392*98,0.00392*89],0))
+trainindData.append(([0.00392*208,0,0.00392*49],0))
+trainindData.append(([0.00392*67,0.00392*15,0.00392*210],1))
+trainindData.append(([0.00392*82,0.00392*117,0.00392*174],1))
+trainindData.append(([0.00392*168,0.00392*42,0.00392*89],0))
+trainindData.append(([0.00392*248,0.00392*80,0.00392*68],0))
+trainindData.append(([0.00392*128,0.00392*80,0.00392*255],1))
+trainindData.append(([0.00392*228,0.00392*105,0.00392*116],0))
+
+
+weights = trainModel(trainindData)
+
+print(weights)
