@@ -4,6 +4,7 @@ import numpy
 import glob
 import re
 import nltk
+import random
 from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
@@ -372,6 +373,59 @@ def generateTrainingFeatureVector(text, idealText):
 
     return documentFeatureVector
 
+def predictModel(features, weights):
+    output = 0
+    for feature, weight in features, weights:
+        output =+ feature * weight
+
+    if output >= 0:
+        return 1.0
+    else:
+        return 0.0
+
+def adjustWeights(weights, features, output, target):
+
+    adjustedWeights = []
+
+    for weight, feature in weights, features:
+        newWeight = weight + (target - output)*feature
+        adjustedWeights.append(newWeight)
+
+    return adjustedWeights
+
+def perceptronModel(trainingFeatures, testFeatures):
+
+    weights = trainModel(trainingFeatures)
+
+def trainModel(trainingFeatures):
+
+    mse = 999
+
+    #add bias to feature vectors
+    for featureRow in trainingFeatures:
+        featureRow.insert(0, 1.0)
+
+    featuresCount = len(trainingFeatures[0][0])
+
+    #init weights:
+    weights = []
+    for idx in range(featuresCount):
+        weights.append(random.random())
+
+    #train model:
+    while (mse-0.001) > 0.0001:
+        mse = 0.0
+        error = 0.0
+
+        for trainingRow in trainingFeatures:
+
+            output = predictModel(trainingRow, weights)
+            error += math.fabs(output - trainingRow[1])
+            weights = adjustWeights(weights, trainingRow, output, trainingRow[1])
+
+        mse = error / featuresCount
+
+
 
 allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
 allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
@@ -381,5 +435,7 @@ allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/
 
 featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
 featureVecTest = generateFeatureDocuments(allDocumentsTest)
+
+
 
 print("test")
