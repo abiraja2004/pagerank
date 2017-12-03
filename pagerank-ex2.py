@@ -265,26 +265,6 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
 
     return pageRankDict
 
-
-def generatePositionPrior(tfidfMatrix):
-    prior = {}
-    N = len(tfidfMatrix)
-    for pos in tfidfMatrix.keys():
-        # smoothing goes here:
-        prior[pos] = N / (pos + 1)
-
-    return prior
-
-
-def generateUniformPrior(tfidfMatrix):
-    prior = {}
-    N = len(tfidfMatrix)
-    for node in tfidfMatrix.keys():
-        # smoothing goes here:
-        prior[node] =  1
-
-    return prior
-
 def generateDocumentVectorImproved(document, normalize = False):
     tokenizer = RegexpTokenizer(r'\w+')
 
@@ -309,6 +289,28 @@ def generateDocumentVectorImproved(document, normalize = False):
         wordCount = normalizeTermFrequency(wordCount)
 
     return wordCount
+
+
+def generatePositionPrior(text):
+    prior = {}
+    corpus = sent_tokenize(text)
+
+    N = len(corpus)
+    for pos in range(len(corpus)):
+        # smoothing goes here:
+        prior[pos] = N / (pos + 1)
+
+    return prior
+
+def generateUniformPrior(text):
+    prior = {}
+    corpus = sent_tokenize(text)
+
+    N = len(corpus)
+    for idx in range(len(corpus)):
+        prior[idx] = 1
+
+    return prior
 
 def generateBayesPrior(text):
     prior = {}
@@ -411,18 +413,19 @@ def printEvaluationSummary(evaluationSummary, methodName):
 
 
 def summarizeDocument(text, edgeWeightMethod, priorMethod):
-    corpus = sent_tokenize(text)
 
-    tfidfMatrix = simpleTfIdf(corpus)
 
     if priorMethod == PriorMethod.UNIFORM:
-        prior = generateUniformPrior(tfidfMatrix)
+        prior = generateUniformPrior(text)
     if priorMethod == PriorMethod.POSITION:
-        prior = generatePositionPrior(tfidfMatrix)
+        prior = generatePositionPrior(text)
     if priorMethod == PriorMethod.TFIDF:
         prior = generateTfIdfPrior(text)
     if priorMethod == PriorMethod.BAYES:
         prior = generateBayesPrior(text)
+
+    corpus = sent_tokenize(text)
+    tfidfMatrix = simpleTfIdf(corpus)
 
     if edgeWeightMethod == WeightMethod.UNIFORM:
         simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
