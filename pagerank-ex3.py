@@ -10,7 +10,7 @@ from nltk.corpus import stopwords
 from numpy import linalg
 
 def readAllTextFiles(pathToFiles):
-    files = glob.glob(pathToFiles + "/*.txt")
+    files = glob.glob(pathToFiles + "/**/*.txt", recursive=True)
     documentTextList = []
     # iterate over the list getting each file
     for file in files:
@@ -28,7 +28,7 @@ def readAllTextFiles(pathToFiles):
     return documentTextList
 
 #-----------------------------------------------------------------------
-#TFIDF methods----------------------------------------------------------
+#TFIDF methods
 #-----------------------------------------------------------------------
 def cosineSimilarity(vectorA, vectorB):
     dotResult = numpy.dot(vectorA, vectorB)
@@ -158,10 +158,91 @@ def compareSimilarity(docTfIdfArray, tfidfMatrix):
 
     return simResults
 
+def simpleTfIdf(documentCorpus):
+    vocabularySet = set()
+    termInDocuments = {}
+
+    # count of sentences (used in idf calculation)
+    documentN = len(documentCorpus)
+
+    documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
+    vocabulary = list(vocabularySet)
+
+    generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
+
+    tfMatrix = generateTfMatrixPerDocument(documentsWordCounts, vocabulary)
+
+    # generate tfidf array for each sentence:
+    tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
+    return tfidfMatrix
 
 
 #---------------------------------------------------------------------
-#-----------------------------------------------------------------------
+#PageRank methods:
+#---------------------------------------------------------------------
+
+def buildSimilarityGraph(tfidfMatrix, threshold, isWeighted=True):
+    graph = {}
+    for key in tfidfMatrix.keys():
+        graph[key] = []
+
+    for key in tfidfMatrix.keys():
+        vectorA = tfidfMatrix[key]
+        for key2 in tfidfMatrix.keys():
+
+            # ignore self similarity
+            if key == key2:
+                continue
+
+            vectorB = tfidfMatrix[key2]
+            sim = cosineSimilarity(vectorA, vectorB)
+            if sim > threshold:
+                if isWeighted:
+                    graph[key].append((key2,sim))
+                else:
+                    graph[key].append((key2, 1.0))
+
+    return graph
+
+def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
+    pageRankDict = {}
+    allIterations = []
+    allDiffIterations = []
+    #invertedGraph = invertGraph(linkGraphDict)
+    invertedGraph = linkGraphDict;
+
+    N = len(linkGraphDict.keys())
+
+    # init pageRankvector
+    for node in linkGraphDict.keys():
+        pageRankDict[node] = 1.0 / N
+
+    for iteration in range(numberOfIterations):
+        pageRankCurIteration = {}
+
+        for node, edges in linkGraphDict.items():
+
+            linkSum = 0
+            for edge in edges:
+                edgeSum = 0
+                for edge2 in invertedGraph[edge[0]]:
+                    edgeSum = edgeSum + edge2[1]
+
+                linkSum = linkSum + ((pageRankDict[edge[0]] * edge[1]) / edgeSum)
+
+            priorProbability = (prior[node]/sum(prior.values()))
+            rank = dampingFactor * priorProbability + (1 - dampingFactor) * linkSum
+            pageRankCurIteration[node] = rank
+
+        pageRankDict = pageRankCurIteration
+
+        if iteration == 49:
+            return pageRankDict
+
+    return pageRankDict
+
+#---------------------------------------------------------------------
+#---------------------------------------------------------------------
 
 def generatePositionPrior(text):
     prior = {}
@@ -216,9 +297,7 @@ def generateTfIdfPrior(text):
     vocabulary = list(vocabularySet)
 
     generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
-
     tfMatrix = generateTfMatrixPerDocument(documentsWordCounts, vocabulary)
-
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
 
@@ -228,24 +307,79 @@ def generateTfIdfPrior(text):
     return prior
 
 
-def generateTrainingFeatureVector(text, idealText):
+def generatePageRankScore(text):
+    prior = generateBayesPrior(text)
+    corpus = sent_tokenize(text)
+    tfidfMatrix = simpleTfIdf(corpus)
+    simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
+    pageRankScore = pageRank(simGraph, prior, 0.15, 1000)
+    return pageRankScore
 
-    features = generateFeatureVector(text)
 
+def generateTrainingFeatureDocuments(textList, idealTextList):
 
+    allTrainingFeautres = []
+
+    for idx in range(len(textList)):
+        features = generateTrainingFeatureVector(textList[idx], idealTextList[idx])
+        allTrainingFeautres += features
+
+    return allTrainingFeautres
+
+def generateFeatureDocuments(textList):
+    allTrainingFeautres = []
+
+    for idx in range(len(textList)):
+        features = generateFeatureVector(textList[idx])
+        allTrainingFeautres += features
+
+    return allTrainingFeautres
 
 def generateFeatureVector(text):
-
-    documentFeaterVector = []
+    documentFeatureVector = []
 
     positionFeatures = generatePositionPrior(text)
     tfidfFeatures = generateTfIdfPrior(text)
     bayesFeatures = generateBayesPrior(text)
+    pageRankFeatures = generatePageRankScore(text)
+
+    for idx in range(len(positionFeatures)):
+        documentFeatureVector.append([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]])
+
+    return documentFeatureVector
 
 
+def generateTrainingFeatureVector(text, idealText):
+    documentFeatureVector = []
+
+    corpus = sent_tokenize(text)
+    idealCorpus = sent_tokenize(idealText)
+
+    targetValueVec = []
+    for idx, sentence in enumerate(corpus):
+        if sentence in idealCorpus:
+            targetValueVec.append(1.0)
+        else:
+            targetValueVec.append(0.0)
+
+    positionFeatures = generatePositionPrior(text)
+    tfidfFeatures = generateTfIdfPrior(text)
+    bayesFeatures = generateBayesPrior(text)
+    pageRankFeatures = generatePageRankScore(text)
+
+    for idx in range(len(positionFeatures)):
+        documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
+
+    return documentFeatureVector
 
 
-allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
-allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
+allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
 
-featureVec = generateTrainingFeatureVector(allDocuments[0], allIdealDocuments[0])
+allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
+allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+
+featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
+featureVecTest = generateFeatureDocuments(allDocumentsTest)
+
+print("test")
