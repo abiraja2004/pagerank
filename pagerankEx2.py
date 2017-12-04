@@ -291,20 +291,19 @@ def generateDocumentVectorImproved(document, normalize = False):
     return wordCount
 
 
-def generatePositionPrior(text):
+def generatePositionPrior(corpus):
     prior = {}
-    corpus = sent_tokenize(text)
 
     N = len(corpus)
     for pos in range(len(corpus)):
         # smoothing goes here:
-        prior[pos] = N / (pos + 1)
+        #prior[pos] = N / (pos + 1)
+        prior[pos] = N / ((pos + 1) + 50)
 
     return prior
 
-def generateUniformPrior(text):
+def generateUniformPrior(corpus):
     prior = {}
-    corpus = sent_tokenize(text)
 
     N = len(corpus)
     for idx in range(len(corpus)):
@@ -312,16 +311,20 @@ def generateUniformPrior(text):
 
     return prior
 
-def generateBayesPrior(text):
+def generateBayesPrior(documentCorpus):
     prior = {}
 
-    documentCorpus = sent_tokenize(text)
     docCount = len(documentCorpus)
     documentTfMatrix = []
 
     for document in documentCorpus:
         documentTf = generateDocumentVectorImproved(document)
         documentTfMatrix.append(documentTf)
+
+    #rework!!
+    text = ""
+    for doc in documentCorpus:
+        text += doc + " "
 
     queryTf = generateDocumentVectorImproved(text)
 
@@ -339,17 +342,22 @@ def generateBayesPrior(text):
     return prior
 
 
-def generateTfIdfPrior(text):
+def generateTfIdfPrior(corpus):
     prior = {}
 
     vocabularySet = set()
     termInDocuments = {}
-    documentCorpus = sent_tokenize(text)
+
+
+    #rework!!
+    text = ""
+    for doc in corpus:
+        text += doc + " "
 
     # count of sentences (used in idf calculation)
-    documentN = len(documentCorpus)
+    documentN = len(corpus)
 
-    documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
+    documentsWordCounts = generateDocumentWordCountAndVocabulary(corpus, vocabularySet)
     vocabulary = list(vocabularySet)
 
     generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
@@ -412,19 +420,18 @@ def printEvaluationSummary(evaluationSummary, methodName):
     print()
 
 
-def summarizeDocument(text, edgeWeightMethod, priorMethod):
+def summarizeDocument(corpus, edgeWeightMethod, priorMethod):
 
 
     if priorMethod == PriorMethod.UNIFORM:
-        prior = generateUniformPrior(text)
+        prior = generateUniformPrior(corpus)
     if priorMethod == PriorMethod.POSITION:
-        prior = generatePositionPrior(text)
+        prior = generatePositionPrior(corpus)
     if priorMethod == PriorMethod.TFIDF:
-        prior = generateTfIdfPrior(text)
+        prior = generateTfIdfPrior(corpus)
     if priorMethod == PriorMethod.BAYES:
-        prior = generateBayesPrior(text)
+        prior = generateBayesPrior(corpus)
 
-    corpus = sent_tokenize(text)
     tfidfMatrix = simpleTfIdf(corpus)
 
     if edgeWeightMethod == WeightMethod.UNIFORM:
@@ -450,7 +457,8 @@ def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weigh
     evaluationSummary = []
 
     for idx, document in enumerate(allDocuments):
-        summarizedDocument = summarizeDocument(document, weightMethod, uniformMethod)
+        corpus = sent_tokenize(document)
+        summarizedDocument = summarizeDocument(corpus, weightMethod, uniformMethod)
         precision, recall, f1, ap = evaluateResults(allIdealDocuments[idx], summarizedDocument)
         evaluationSummary.append((precision, recall, f1, ap))
 
@@ -462,5 +470,5 @@ allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sum√
 
 evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
-evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
-evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)
+#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
+#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)

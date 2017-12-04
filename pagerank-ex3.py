@@ -5,10 +5,13 @@ import glob
 import re
 import nltk
 import random
+import matplotlib.pyplot as plt
 from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 from numpy import linalg
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
 
 def readAllTextFiles(pathToFiles):
     files = glob.glob(pathToFiles + "/**/*.txt", recursive=True)
@@ -251,8 +254,8 @@ def generatePositionPrior(text):
 
     N = len(corpus)
     for pos in range(len(corpus)):
-        # smoothing goes here:
-        prior[pos] = N / (pos + 1)
+        # with smoothing
+        prior[pos] = N / ((pos + 1) + 50)
 
     return prior
 
@@ -328,13 +331,45 @@ def generateTrainingFeatureDocuments(textList, idealTextList):
     return allTrainingFeautres
 
 def generateFeatureDocuments(textList):
-    allTrainingFeautres = []
+    allFeautres = []
 
     for idx in range(len(textList)):
         features = generateFeatureVector(textList[idx])
-        allTrainingFeautres += features
+        allFeautres += features
 
-    return allTrainingFeautres
+    return allFeautres
+
+def plotFeatures(trainingFeatures):
+
+    dim1 = []
+    dim2 = []
+    dim3 = []
+    target = []
+
+    for feature in trainingFeatures:
+        dim1.append(feature[0][0])
+        dim2.append(feature[0][1])
+        dim3.append(feature[0][2])
+        target.append(feature[1])
+
+    plt.scatter(dim1, dim2, c=target)
+    plt.ylabel('dim2')
+    plt.xlabel('dim1')
+    plt.show()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    targetNumpy = numpy.array(target)
+    tfidfNumpy = np.fromiter(iter(dim1), dtype=float)
+    pageRankNumpy = np.fromiter(iter(dim2), dtype=float)
+    positionNumpy = np.fromiter(iter(dim3), dtype=float)
+
+    ax.scatter(tfidfNumpy, pageRankNumpy, positionNumpy, c=targetNumpy, marker='o')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+
 
 def generateFeatureVector(text):
     documentFeatureVector = []
@@ -371,7 +406,27 @@ def generateTrainingFeatureVector(text, idealText):
     for idx in range(len(positionFeatures)):
         #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
         #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
-        documentFeatureVector.append(([tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
+        documentFeatureVector.append(([tfidfFeatures[idx], pageRankFeatures[idx], positionFeatures[idx]], targetValueVec[idx]))
+
+    plt.scatter(positionFeatures.values(), pageRankFeatures.values(),  c=targetValueVec)
+    plt.ylabel('page rank')
+    plt.xlabel('tfidf')
+    plt.show()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    targetNumpy = numpy.array(targetValueVec)
+    tfidfNumpy = np.fromiter(iter(tfidfFeatures.values()), dtype=float)
+    pageRankNumpy = np.fromiter(iter(pageRankFeatures.values()), dtype=float)
+    positionNumpy = np.fromiter(iter(positionFeatures.values()), dtype=float)
+
+    ax.scatter(tfidfNumpy, pageRankNumpy, positionNumpy, c=targetNumpy, marker='o')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+
+    plt.show()
 
     return documentFeatureVector
 
@@ -381,7 +436,13 @@ def predictModel(features, weights):
         output = output + feature * weight
 
     #sigmoid:
-    output = 1.0 / (1.0 + math.exp(-output))
+    #output = 1.0 / (1.0 + math.exp(-output))
+
+    #threshold
+    if output >= 0:
+        output = 1.0
+    else:
+        output = 0.0
 
     return output
 
@@ -393,11 +454,11 @@ def predictModelVal(features, weights):
         return output
 
 def adjustWeights(weights, features, output, target):
-
+    teachingStep = 0.01
     adjustedWeights = []
 
     for (weight, feature) in zip(weights, features):
-        newWeight = weight + (target - output)*feature
+        newWeight = weight + teachingStep*(target - output)*feature
         adjustedWeights.append(newWeight)
 
     return adjustedWeights
@@ -418,8 +479,8 @@ def trainModel(trainingFeatures):
     mse = 999
 
     #add bias to feature vectors
-    #for featureRow in trainingFeatures:
-     #   featureRow[0].insert(0, 1.0)
+    for featureRow in trainingFeatures:
+        featureRow[0].insert(0, 1.0)
 
     featuresCount = len(trainingFeatures[0][0])
 
@@ -447,36 +508,35 @@ def trainModel(trainingFeatures):
     return weights
 
 
+allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
+allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
 
-#allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
-#allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
+allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
+allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
-#allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
-#allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
+featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
+featureVecTest = generateFeatureDocuments(allDocumentsTest)
 
-#featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
-#featureVecTest = generateFeatureDocuments(allDocumentsTest)
-
-#perceptronModel(featureVecTraining, featureVecTest)
+perceptronModel(featureVecTraining, featureVecTest)
 
 #blue = 1
 #red = 0
-trainindData = []
-trainindData.append(([0,0,0.00392*255],1))
-trainindData.append(([0,0,0.00392*192],1))
-trainindData.append(([0.00392*243,0.00392*80,0.00392*59],0))
-trainindData.append(([0.00392*255,0,0.00392*77],0))
-trainindData.append(([0.00392*77,0.00392*93,0.00392*190],1))
-trainindData.append(([0.00392*255,0.00392*98,0.00392*89],0))
-trainindData.append(([0.00392*208,0,0.00392*49],0))
-trainindData.append(([0.00392*67,0.00392*15,0.00392*210],1))
-trainindData.append(([0.00392*82,0.00392*117,0.00392*174],1))
-trainindData.append(([0.00392*168,0.00392*42,0.00392*89],0))
-trainindData.append(([0.00392*248,0.00392*80,0.00392*68],0))
-trainindData.append(([0.00392*128,0.00392*80,0.00392*255],1))
-trainindData.append(([0.00392*228,0.00392*105,0.00392*116],0))
-
-
-weights = trainModel(trainindData)
-
-print(weights)
+# trainindData = []
+# trainindData.append(([0,0,0.00392*255],1))
+# trainindData.append(([0,0,0.00392*192],1))
+# trainindData.append(([0.00392*243,0.00392*80,0.00392*59],0))
+# trainindData.append(([0.00392*255,0,0.00392*77],0))
+# trainindData.append(([0.00392*77,0.00392*93,0.00392*190],1))
+# trainindData.append(([0.00392*255,0.00392*98,0.00392*89],0))
+# trainindData.append(([0.00392*208,0,0.00392*49],0))
+# trainindData.append(([0.00392*67,0.00392*15,0.00392*210],1))
+# trainindData.append(([0.00392*82,0.00392*117,0.00392*174],1))
+# trainindData.append(([0.00392*168,0.00392*42,0.00392*89],0))
+# trainindData.append(([0.00392*248,0.00392*80,0.00392*68],0))
+# trainindData.append(([0.00392*128,0.00392*80,0.00392*255],1))
+# trainindData.append(([0.00392*228,0.00392*105,0.00392*116],0))
+#
+#
+# weights = trainModel(trainindData)
+#
+# print(weights)
