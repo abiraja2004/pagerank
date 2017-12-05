@@ -408,7 +408,7 @@ def generateTrainingFeatureVector(text, idealText):
         #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
         documentFeatureVector.append(([tfidfFeatures[idx], pageRankFeatures[idx], positionFeatures[idx]], targetValueVec[idx]))
 
-    plt.scatter(positionFeatures.values(), pageRankFeatures.values(),  c=targetValueVec)
+    plt.scatter(tfidfFeatures.values(), pageRankFeatures.values(),  c=targetValueVec)
     plt.ylabel('page rank')
     plt.xlabel('tfidf')
     plt.show()
@@ -488,7 +488,6 @@ def trainModel(trainingFeatures):
     weights = []
     for idx in range(featuresCount):
         weights.append(random.random())
-    #weights.append(0.0)
 
     epochs = 0
     #train model:

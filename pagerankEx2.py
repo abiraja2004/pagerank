@@ -81,52 +81,53 @@ def normalizeTermFrequency(wordCounts):
 
     return wordCounts
 
-
-def generateDocumentVector(document):
-    # remove punctuation, lemmatation, stemming
+def generateDocumentVector(document, normalize = False):
     tokenizer = RegexpTokenizer(r'\w+')
+
+    stop_words = set(stopwords.words("portuguese"))
     tokens = tokenizer.tokenize(document)
 
     wordCount = Counter(tokens)
-    normalizedWordCount = normalizeTermFrequency(wordCount)
 
-    return normalizedWordCount
+    if normalize == True:
+        wordCount = normalizeTermFrequency(wordCount)
 
+    return wordCount
 
-def generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet):
-    documentWordCounts = []
+def generateDocumentWordCountAndVocabulary(documentCorpusDict, vocabularySet):
+    documentWordCounts = {}
     # generate vocabulary and term count per document
-    for sentence in documentCorpus:
+    for id, sentence in documentCorpusDict.items():
         normalizedWordCount = generateDocumentVector(sentence)
         #normalizedWordCount = generateDocumentVectorImproved(sentence, True)
         vocabularySet.update(normalizedWordCount.keys())
-        documentWordCounts.append(normalizedWordCount)
+        documentWordCounts[id] = normalizedWordCount
 
     return documentWordCounts
 
 
-def generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments):
+def generateTermCountsPerDocument(documentsWordCountsDict, vocabulary, termInDocuments):
     # generate term count for all sentences:
     for vocab in vocabulary:
-        for dokumentVectorWordCount in documentsWordCounts:
+        for dokumentVectorWordCount in documentsWordCountsDict.values():
             if dokumentVectorWordCount.get(vocab, 0) != 0:
                 value = termInDocuments.get(vocab, 0)
                 value = value + 1
                 termInDocuments[vocab] = value
 
 
-def generateTfMatrixPerDocument(documentsWordCounts, vocabulary):
-    tfMatrix = []
-    for counterDoc in documentsWordCounts:
+def generateTfMatrixPerDocument(wordCountDict, vocabulary):
+    tfMatrix = {}
+    for id, counterDoc in wordCountDict.items():
         tfArray = calcTfArray(counterDoc, vocabulary)
-        tfMatrix.append(tfArray)
+        tfMatrix[id] = tfArray
 
     return tfMatrix
 
 
 def generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN):
     tfidfMatrix = {}
-    for id, tfArray in enumerate(tfMatrix):
+    for id, tfArray in tfMatrix.items():
         tfdidfArray = calcTfIdfArray(tfArray, vocabulary, termInDocuments, documentN)
         tfidfMatrix[id] = tfdidfArray
 
@@ -150,8 +151,6 @@ def simpleTfIdf(documentCorpus):
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
     return tfidfMatrix
-
-
 
 
 def invertGraph(graph):
@@ -265,70 +264,43 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
 
     return pageRankDict
 
-def generateDocumentVectorImproved(document, normalize = False):
-    tokenizer = RegexpTokenizer(r'\w+')
 
-    stop_words = set(stopwords.words("portuguese"))
-    tokens = tokenizer.tokenize(document)
-
-    filterd_tokens = []
-    for token in tokens:
-        if token not in stop_words:
-            token = token.lower()
-            filterd_tokens.append(token)
-
-    filteredAndStemmedTokens = []
-    stemmer = nltk.stem.RSLPStemmer()
-    for token in filterd_tokens:
-        stemmed = stemmer.stem(token)
-        filteredAndStemmedTokens.append(stemmed)
-
-    wordCount = Counter(filteredAndStemmedTokens)
-
-    if normalize == True:
-        wordCount = normalizeTermFrequency(wordCount)
-
-    return wordCount
-
-
-def generatePositionPrior(corpus):
+def generatePositionPrior(corpusDict):
     prior = {}
 
-    N = len(corpus)
-    for pos in range(len(corpus)):
-        # smoothing goes here:
-        #prior[pos] = N / (pos + 1)
-        prior[pos] = N / ((pos + 1) + 50)
+    N = len(corpusDict.values())
+    pos = 1
+    for id in corpusDict.keys():
+        prior[id] = N / (pos + 50)
+        pos += 1
 
     return prior
 
-def generateUniformPrior(corpus):
+def generateUniformPrior(corpusDict):
     prior = {}
 
-    N = len(corpus)
-    for idx in range(len(corpus)):
-        prior[idx] = 1
+    for id in corpusDict.keys():
+        prior[id] = 1
 
     return prior
 
-def generateBayesPrior(documentCorpus):
+def generateBayesPrior(documentCorpusDict):
     prior = {}
 
-    docCount = len(documentCorpus)
-    documentTfMatrix = []
+    docCount = len(documentCorpusDict.values())
+    documentTfMatrix = {}
 
-    for document in documentCorpus:
-        documentTf = generateDocumentVectorImproved(document)
-        documentTfMatrix.append(documentTf)
+    for id, document in documentCorpusDict.items():
+        documentTf = generateDocumentVector(document)
+        documentTfMatrix[id] = documentTf
 
-    #rework!!
-    text = ""
-    for doc in documentCorpus:
-        text += doc + " "
+    queryText = ""
+    for doc in documentCorpusDict.values():
+        queryText += doc + " "
 
-    queryTf = generateDocumentVectorImproved(text)
+    queryTf = generateDocumentVector(queryText)
 
-    for idx, documentTf in enumerate(documentTfMatrix):
+    for id, documentTf in documentTfMatrix.items():
         probQuery = 0
         docLength = sum(documentTf.values())
 
@@ -337,37 +309,35 @@ def generateBayesPrior(documentCorpus):
             probDoc = math.pow(((docTF + 1) / (docLength+1)), queryTF)
             probQuery = probQuery + math.log(1/docCount) + math.log(probDoc)
 
-        prior[idx] = probQuery
+        prior[id] = probQuery
 
     return prior
 
 
-def generateTfIdfPrior(corpus):
+def generateTfIdfPrior(corpusDict):
     prior = {}
 
     vocabularySet = set()
     termInDocuments = {}
 
-
-    #rework!!
-    text = ""
-    for doc in corpus:
-        text += doc + " "
+    queryText = ""
+    for doc in corpusDict.values():
+        queryText += doc + " "
 
     # count of sentences (used in idf calculation)
-    documentN = len(corpus)
+    documentN = len(corpusDict.values())
 
-    documentsWordCounts = generateDocumentWordCountAndVocabulary(corpus, vocabularySet)
+    wordCountDict = generateDocumentWordCountAndVocabulary(corpusDict, vocabularySet)
     vocabulary = list(vocabularySet)
 
-    generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
+    generateTermCountsPerDocument(wordCountDict, vocabulary, termInDocuments)
 
-    tfMatrix = generateTfMatrixPerDocument(documentsWordCounts, vocabulary)
+    tfMatrix = generateTfMatrixPerDocument(wordCountDict, vocabulary)
 
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
 
-    queryTfIdfArray = generateTfIdfArray(text, vocabulary, termInDocuments, documentN)
+    queryTfIdfArray = generateTfIdfArray(queryText, vocabulary, termInDocuments, documentN)
     prior = compareSimilarity(queryTfIdfArray, tfidfMatrix)
 
     return prior
@@ -419,20 +389,64 @@ def printEvaluationSummary(evaluationSummary, methodName):
     print("Avg f1: " + str(avgF1))
     print()
 
+def filterTextCorpus(corpusDict, language):
 
-def summarizeDocument(corpus, edgeWeightMethod, priorMethod):
+    filterdCorpusDict = {}
 
+    for id, sent in corpusDict.items():
+        filterdSentence = sent.lower()
+        filterdSentence = re.sub('[^A-Za-z0-9 ]+', '', filterdSentence)
+        filterdSentence = removeStopWords(filterdSentence, language)
+        filterdSentence = stemmSentence(filterdSentence)
+
+        if filterdSentence is "":
+            continue
+
+        filterdCorpusDict[id] = filterdSentence
+
+    return filterdCorpusDict
+
+def removeStopWords(sentence, language):
+    stop_words = set(stopwords.words(language))
+    filterdSentence = ""
+
+    wordList = nltk.word_tokenize(sentence)
+
+    for word in wordList:
+        if word not in stop_words and len(word) > 2:
+            word = word.lower()
+            filterdSentence += word + " "
+
+    return filterdSentence
+
+def stemmSentence(sentence):
+    stemmedTokens = ""
+    stemmer = nltk.stem.RSLPStemmer()
+    wordList = nltk.word_tokenize(sentence)
+    for token in wordList:
+        stemmed = stemmer.stem(token)
+        stemmedTokens += stemmed + " "
+
+    return stemmedTokens
+
+def summarizeDocument(corpus, edgeWeightMethod, priorMethod , language="portuguese"):
+
+    corpusDict = {}
+    for id, sent in enumerate(corpus):
+        corpusDict[id] = sent
+
+    filteredCorpus = filterTextCorpus(corpusDict, language)
 
     if priorMethod == PriorMethod.UNIFORM:
-        prior = generateUniformPrior(corpus)
+        prior = generateUniformPrior(filteredCorpus)
     if priorMethod == PriorMethod.POSITION:
-        prior = generatePositionPrior(corpus)
+        prior = generatePositionPrior(filteredCorpus)
     if priorMethod == PriorMethod.TFIDF:
-        prior = generateTfIdfPrior(corpus)
+        prior = generateTfIdfPrior(filteredCorpus)
     if priorMethod == PriorMethod.BAYES:
-        prior = generateBayesPrior(corpus)
+        prior = generateBayesPrior(filteredCorpus)
 
-    tfidfMatrix = simpleTfIdf(corpus)
+    tfidfMatrix = simpleTfIdf(filteredCorpus)
 
     if edgeWeightMethod == WeightMethod.UNIFORM:
         simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
@@ -470,5 +484,5 @@ allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sum√
 
 evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
-#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
-#evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)

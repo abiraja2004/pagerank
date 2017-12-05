@@ -66,13 +66,12 @@ def genereateNewsHtml(newsSummary):
         file.write(sentence + "\n")
         file.write("</h2>\n")
 
-
     file.write("</html>\n")
     file.close()
 
 
 newsCorpus = fetchNewsCorpus()
-summary = summarizeDocument(newsCorpus, WeightMethod.TFIDF, PriorMethod.POSITION)
+summary = summarizeDocument(newsCorpus, WeightMethod.TFIDF, PriorMethod.TFIDF, 'english')
 genereateNewsHtml(summary)
 
 print(summary)
