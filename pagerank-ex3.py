@@ -72,81 +72,59 @@ def normalizeTermFrequency(wordCounts):
     return wordCounts
 
 
-def generateDocumentVector(document):
-    # remove punctuation, lemmatation, stemming
+def generateDocumentVector(document, normalize = False):
     tokenizer = RegexpTokenizer(r'\w+')
+
+    stop_words = set(stopwords.words("portuguese"))
     tokens = tokenizer.tokenize(document)
 
     wordCount = Counter(tokens)
-    normalizedWordCount = normalizeTermFrequency(wordCount)
 
-    return normalizedWordCount
+    if normalize == True:
+        wordCount = normalizeTermFrequency(wordCount)
+
+    return wordCount
 
 
-def generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet):
-    documentWordCounts = []
+def generateDocumentWordCountAndVocabulary(documentCorpusDict, vocabularySet):
+    documentWordCounts = {}
     # generate vocabulary and term count per document
-    for sentence in documentCorpus:
+    for id, sentence in documentCorpusDict.items():
         normalizedWordCount = generateDocumentVector(sentence)
         #normalizedWordCount = generateDocumentVectorImproved(sentence, True)
         vocabularySet.update(normalizedWordCount.keys())
-        documentWordCounts.append(normalizedWordCount)
+        documentWordCounts[id] = normalizedWordCount
 
     return documentWordCounts
 
 
-def generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments):
+def generateTermCountsPerDocument(documentsWordCountsDict, vocabulary, termInDocuments):
     # generate term count for all sentences:
     for vocab in vocabulary:
-        for dokumentVectorWordCount in documentsWordCounts:
+        for dokumentVectorWordCount in documentsWordCountsDict.values():
             if dokumentVectorWordCount.get(vocab, 0) != 0:
                 value = termInDocuments.get(vocab, 0)
                 value = value + 1
                 termInDocuments[vocab] = value
 
 
-def generateTfMatrixPerDocument(documentsWordCounts, vocabulary):
-    tfMatrix = []
-    for counterDoc in documentsWordCounts:
+def generateTfMatrixPerDocument(wordCountDict, vocabulary):
+    tfMatrix = {}
+    for id, counterDoc in wordCountDict.items():
         tfArray = calcTfArray(counterDoc, vocabulary)
-        tfMatrix.append(tfArray)
+        tfMatrix[id] = tfArray
 
     return tfMatrix
 
 
 def generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN):
     tfidfMatrix = {}
-    for id, tfArray in enumerate(tfMatrix):
+    for id, tfArray in tfMatrix.items():
         tfdidfArray = calcTfIdfArray(tfArray, vocabulary, termInDocuments, documentN)
         tfidfMatrix[id] = tfdidfArray
 
     return tfidfMatrix
 
-
-def generateDocumentVectorImproved(document, normalize = False):
-    tokenizer = RegexpTokenizer(r'\w+')
-
-    stop_words = set(stopwords.words("portuguese"))
-    tokens = tokenizer.tokenize(document)
-
-    filterd_tokens = []
-    for token in tokens:
-        if token not in stop_words:
-            token = token.lower()
-            filterd_tokens.append(token)
-
-    filteredAndStemmedTokens = []
-    stemmer = nltk.stem.RSLPStemmer()
-    for token in filterd_tokens:
-        stemmed = stemmer.stem(token)
-        filteredAndStemmedTokens.append(stemmed)
-
-    wordCount = Counter(filteredAndStemmedTokens)
-
-    if normalize == True:
-        wordCount = normalizeTermFrequency(wordCount)
-
-    return wordCount
 
 def generateTfIdfArray(document, vocabulary, globalWordCount, documentN):
     normalizedWordCount = generateDocumentVector(document)
@@ -167,7 +145,7 @@ def simpleTfIdf(documentCorpus):
     termInDocuments = {}
 
     # count of sentences (used in idf calculation)
-    documentN = len(documentCorpus)
+    documentN = len(documentCorpus.values())
 
     documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
     vocabulary = list(vocabularySet)
@@ -179,6 +157,7 @@ def simpleTfIdf(documentCorpus):
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
     return tfidfMatrix
+
 
 
 #---------------------------------------------------------------------
@@ -248,73 +227,127 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
 #---------------------------------------------------------------------
 #---------------------------------------------------------------------
 
-def generatePositionPrior(text):
-    prior = {}
-    corpus = sent_tokenize(text)
+def filterTextCorpus(corpusDict, language):
 
-    N = len(corpus)
-    for pos in range(len(corpus)):
-        # with smoothing
-        prior[pos] = N / ((pos + 1) + 50)
+    filterdCorpusDict = {}
+
+    for id, sent in corpusDict.items():
+        filterdSentence = sent.lower()
+        filterdSentence = re.sub('[^A-Za-z0-9 ]+', '', filterdSentence)
+        filterdSentence = removeStopWords(filterdSentence, language)
+        filterdSentence = stemmSentence(filterdSentence)
+
+        if filterdSentence is "":
+            continue
+
+        filterdCorpusDict[id] = filterdSentence
+
+    return filterdCorpusDict
+
+def removeStopWords(sentence, language):
+    stop_words = set(stopwords.words(language))
+    filterdSentence = ""
+
+    wordList = nltk.word_tokenize(sentence)
+
+    for word in wordList:
+        if word not in stop_words and len(word) > 2:
+            word = word.lower()
+            filterdSentence += word + " "
+
+    return filterdSentence
+
+def stemmSentence(sentence):
+    stemmedTokens = ""
+    stemmer = nltk.stem.RSLPStemmer()
+    wordList = nltk.word_tokenize(sentence)
+    for token in wordList:
+        stemmed = stemmer.stem(token)
+        stemmedTokens += stemmed + " "
+
+    return stemmedTokens
+
+def generatePositionPrior(corpusDict):
+    prior = {}
+
+    N = len(corpusDict.values())
+    pos = 1
+    for id in corpusDict.keys():
+        prior[id] = N / (pos + 50)
+        pos += 1
 
     return prior
 
-
-def generateBayesPrior(text):
+def generateUniformPrior(corpusDict):
     prior = {}
 
-    documentCorpus = sent_tokenize(text)
-    docCount = len(documentCorpus)
-    documentTfMatrix = []
+    for id in corpusDict.keys():
+        prior[id] = 1
 
-    for document in documentCorpus:
-        documentTf = generateDocumentVectorImproved(document)
-        documentTfMatrix.append(documentTf)
+    return prior
 
-    queryTf = generateDocumentVectorImproved(text)
+def generateBayesPrior(documentCorpusDict):
+    prior = {}
 
-    for idx, documentTf in enumerate(documentTfMatrix):
+    docCount = len(documentCorpusDict.values())
+    documentTfMatrix = {}
+
+    for id, document in documentCorpusDict.items():
+        documentTf = generateDocumentVector(document)
+        documentTfMatrix[id] = documentTf
+
+    queryText = ""
+    for doc in documentCorpusDict.values():
+        queryText += doc + " "
+
+    queryTf = generateDocumentVector(queryText)
+
+    for id, documentTf in documentTfMatrix.items():
         probQuery = 0
         docLength = sum(documentTf.values())
 
         for queryTerm, queryTF in queryTf.items():
-            docTF = documentTf.get(queryTerm, 0)
-            probDoc = math.pow(((docTF + 1) / (docLength + 1)), queryTF)
-            probQuery = probQuery + math.log(1 / docCount) + math.log(probDoc)
+            docTF = documentTf.get(queryTerm,0)
+            probDoc = math.pow(((docTF + 1) / (docLength+1)), queryTF)
+            probQuery = probQuery + math.log(1/docCount) + math.log(probDoc)
 
-        prior[idx] = probQuery
+        prior[id] = probQuery
 
     return prior
 
 
-def generateTfIdfPrior(text):
+def generateTfIdfPrior(corpusDict):
     prior = {}
 
     vocabularySet = set()
     termInDocuments = {}
-    documentCorpus = sent_tokenize(text)
+
+    queryText = ""
+    for doc in corpusDict.values():
+        queryText += doc + " "
 
     # count of sentences (used in idf calculation)
-    documentN = len(documentCorpus)
+    documentN = len(corpusDict.values())
 
-    documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
+    wordCountDict = generateDocumentWordCountAndVocabulary(corpusDict, vocabularySet)
     vocabulary = list(vocabularySet)
+    generateTermCountsPerDocument(wordCountDict, vocabulary, termInDocuments)
 
-    generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments)
-    tfMatrix = generateTfMatrixPerDocument(documentsWordCounts, vocabulary)
+    tfMatrix = generateTfMatrixPerDocument(wordCountDict, vocabulary)
+
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
 
-    queryTfIdfArray = generateTfIdfArray(text, vocabulary, termInDocuments, documentN)
+    queryTfIdfArray = generateTfIdfArray(queryText, vocabulary, termInDocuments, documentN)
     prior = compareSimilarity(queryTfIdfArray, tfidfMatrix)
 
     return prior
 
 
-def generatePageRankScore(text):
-    prior = generateBayesPrior(text)
-    corpus = sent_tokenize(text)
-    tfidfMatrix = simpleTfIdf(corpus)
+def generatePageRankScore(corpusDict):
+    prior = generatePositionPrior(corpusDict)
+
+    tfidfMatrix = simpleTfIdf(corpusDict)
     simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
     pageRankScore = pageRank(simGraph, prior, 0.15, 1000)
     return pageRankScore
@@ -335,52 +368,28 @@ def generateFeatureDocuments(textList):
 
     for idx in range(len(textList)):
         features = generateFeatureVector(textList[idx])
-        allFeautres += features
+        allFeautres.append(features)
 
     return allFeautres
 
-def plotFeatures(trainingFeatures):
 
-    dim1 = []
-    dim2 = []
-    dim3 = []
-    target = []
-
-    for feature in trainingFeatures:
-        dim1.append(feature[0][0])
-        dim2.append(feature[0][1])
-        dim3.append(feature[0][2])
-        target.append(feature[1])
-
-    plt.scatter(dim1, dim2, c=target)
-    plt.ylabel('dim2')
-    plt.xlabel('dim1')
-    plt.show()
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    targetNumpy = numpy.array(target)
-    tfidfNumpy = np.fromiter(iter(dim1), dtype=float)
-    pageRankNumpy = np.fromiter(iter(dim2), dtype=float)
-    positionNumpy = np.fromiter(iter(dim3), dtype=float)
-
-    ax.scatter(tfidfNumpy, pageRankNumpy, positionNumpy, c=targetNumpy, marker='o')
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
-
-
-def generateFeatureVector(text):
+def generateFeatureVector(corpus):
     documentFeatureVector = []
+    corpusDict = {}
 
-    positionFeatures = generatePositionPrior(text)
-    tfidfFeatures = generateTfIdfPrior(text)
-    bayesFeatures = generateBayesPrior(text)
-    pageRankFeatures = generatePageRankScore(text)
+    for id, sent in enumerate(corpus):
+        corpusDict[id] = sent
 
-    for idx in range(len(positionFeatures)):
-        documentFeatureVector.append([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]])
+    filteredCorpus = filterTextCorpus(corpusDict, "portuguese")
+
+    positionFeatures = generatePositionPrior(filteredCorpus)
+    tfidfFeatures = generateTfIdfPrior(filteredCorpus)
+    bayesFeatures = generateBayesPrior(filteredCorpus)
+    pageRankFeatures = generatePageRankScore(filteredCorpus)
+
+
+    for id in positionFeatures.keys():
+        documentFeatureVector.append((id, [positionFeatures[id], tfidfFeatures[id], bayesFeatures[id], pageRankFeatures[id]]))
 
     return documentFeatureVector
 
@@ -388,7 +397,13 @@ def generateFeatureVector(text):
 def generateTrainingFeatureVector(text, idealText):
     documentFeatureVector = []
 
-    corpus = sent_tokenize(text)
+    corpusDict = {}
+    corpus = nltk.sent_tokenize(text)
+    for id, sent in enumerate(corpus):
+        corpusDict[id] = sent
+
+    filteredCorpus = filterTextCorpus(corpusDict, "portuguese")
+
     idealCorpus = sent_tokenize(idealText)
 
     targetValueVec = []
@@ -398,35 +413,15 @@ def generateTrainingFeatureVector(text, idealText):
         else:
             targetValueVec.append(0.0)
 
-    positionFeatures = generatePositionPrior(text)
-    tfidfFeatures = generateTfIdfPrior(text)
-    bayesFeatures = generateBayesPrior(text)
-    pageRankFeatures = generatePageRankScore(text)
+    positionFeatures = generatePositionPrior(filteredCorpus)
+    tfidfFeatures = generateTfIdfPrior(filteredCorpus)
+    bayesFeatures = generateBayesPrior(filteredCorpus)
+    pageRankFeatures = generatePageRankScore(filteredCorpus)
 
-    for idx in range(len(positionFeatures)):
-        #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], bayesFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
-        #documentFeatureVector.append(([positionFeatures[idx], tfidfFeatures[idx], pageRankFeatures[idx]], targetValueVec[idx]))
-        documentFeatureVector.append(([tfidfFeatures[idx], pageRankFeatures[idx], positionFeatures[idx]], targetValueVec[idx]))
-
-    plt.scatter(tfidfFeatures.values(), pageRankFeatures.values(),  c=targetValueVec)
-    plt.ylabel('page rank')
-    plt.xlabel('tfidf')
-    plt.show()
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    targetNumpy = numpy.array(targetValueVec)
-    tfidfNumpy = np.fromiter(iter(tfidfFeatures.values()), dtype=float)
-    pageRankNumpy = np.fromiter(iter(pageRankFeatures.values()), dtype=float)
-    positionNumpy = np.fromiter(iter(positionFeatures.values()), dtype=float)
-
-    ax.scatter(tfidfNumpy, pageRankNumpy, positionNumpy, c=targetNumpy, marker='o')
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
-
-    plt.show()
+    for id in positionFeatures.keys():
+        #documentFeatureVector.append(([positionFeatures[id], tfidfFeatures[id], bayesFeatures[id], pageRankFeatures[id]], targetValueVec[id]))
+        documentFeatureVector.append(([positionFeatures[id], tfidfFeatures[id], pageRankFeatures[id]], targetValueVec[id]))
+        #documentFeatureVector.append(([tfidfFeatures[id], pageRankFeatures[id], positionFeatures[id]], targetValueVec[id]))
 
     return documentFeatureVector
 
@@ -434,9 +429,6 @@ def predictModel(features, weights):
     output = 0.0
     for (feature, weight) in zip(features, weights):
         output = output + feature * weight
-
-    #sigmoid:
-    #output = 1.0 / (1.0 + math.exp(-output))
 
     #threshold
     if output >= 0:
@@ -448,8 +440,12 @@ def predictModel(features, weights):
 
 def predictModelVal(features, weights):
         output = 0
-        for feature, weight in features, weights:
-            output = + feature * weight
+
+        # add bias to feature vector
+        features.insert(0, 1.0)
+
+        for feature, weight in zip(features, weights):
+            output = output + feature * weight
 
         return output
 
@@ -463,18 +459,20 @@ def adjustWeights(weights, features, output, target):
 
     return adjustedWeights
 
-def perceptronModel(trainingFeatures, testFeatures):
+def predictFeaturesPerceptron(testFeaturesList, weights):
+    allPredictionList = []
 
-    weights = trainModel(trainingFeatures)
-    predictionList = []
+    for testFeatures in testFeaturesList:
+        docPredictionList = []
+        for features in testFeatures:
+            predictionValue = predictModelVal(features[1], weights)
+            docPredictionList.append((features[0], predictionValue))
 
-    for testFeature in testFeatures:
-        predictionValue = predictModelVal(testFeature, weights)
-        predictionList.append(predictionValue)
+        allPredictionList.append(docPredictionList)
 
-    return predictionList
+    return allPredictionList
 
-def trainModel(trainingFeatures):
+def trainPerceptronModel(trainingFeatures):
 
     mse = 999
 
@@ -502,40 +500,97 @@ def trainModel(trainingFeatures):
 
         mse = error / len(trainingFeatures)
         epochs += 1
-        print("The mean square error of "+  str(epochs) + " epoch is "+ str(mse));
+        #print("The mean square error of "+  str(epochs) + " epoch is "+ str(mse));
+
+        if epochs == 1000:
+            return weights
 
     return weights
 
+def evaluateResults(relevantDocument, retrievedDocuments):
+    correctFetchedDocs = 0
+    averagePrecision = 0
+    relevantDocuments = sent_tokenize(relevantDocument)
+
+    for count,retrievedDoc in enumerate(retrievedDocuments):
+        if retrievedDoc in relevantDocuments:
+            correctFetchedDocs += 1
+            averagePrecision += correctFetchedDocs / (count + 1)
+
+    averagePrecision = averagePrecision / len(relevantDocuments)
+    precision = correctFetchedDocs / len(retrievedDocuments)
+    recall = correctFetchedDocs / len(relevantDocuments)
+
+    if (precision + recall) != 0:
+        f1 = (2 * precision * recall) / (precision + recall)
+    else:
+        f1 = 0.0
+
+    return precision, recall, f1, averagePrecision
+
+
+
+def printEvaluationSummary(evaluationSummary, methodName):
+    map = 0
+    avgPrecision = 0
+    avgRecall = 0
+    avgF1 = 0
+    for evaluatedQuery in evaluationSummary:
+        map += evaluatedQuery[3]
+        avgF1 += evaluatedQuery[2]
+        avgRecall += evaluatedQuery[1]
+        avgPrecision += evaluatedQuery[0]
+
+    map = map / len(evaluationSummary)
+    avgF1 = avgF1 / len(evaluationSummary)
+    avgRecall = avgRecall / len(evaluationSummary)
+    avgPrecision = avgPrecision / len(evaluationSummary)
+
+    print(methodName)
+    print("MAP: " + str(map))
+    print("Avg precision: " + str(avgPrecision))
+    print("Avg recall: " + str(avgRecall))
+    print("Avg f1: " + str(avgF1))
+    print()
+
+
+def evaluateTextSummarizationPerceptron(allDocuments, allIdealDocuments, weights):
+    evaluationSummary = []
+
+    for idx, document in enumerate(allDocuments):
+        corpus = sent_tokenize(document)
+        summarizedDocument = summarizeDocumentPerceptron(corpus, weights)
+        precision, recall, f1, ap = evaluateResults(allIdealDocuments[idx], summarizedDocument)
+        evaluationSummary.append((precision, recall, f1, ap))
+
+    printEvaluationSummary(evaluationSummary, "perceptron")
+
+def summarizeDocumentPerceptron(corpus, weights):
+
+    featuresSent = generateFeatureVector(corpus)
+    docPrecitionRanking = []
+
+    for features in featuresSent:
+        predictionValue = predictModelVal(features[1], weights)
+        docPrecitionRanking.append((features[0], predictionValue))
+
+    sortedList = sorted(docPrecitionRanking, key=lambda x: x[1], reverse=True)
+    top5Results = sortedList[:5]
+    top5Results = sorted(top5Results, key=lambda x: x[0])
+
+    summarizedResult = []
+    for result in top5Results:
+        summarizedResult.append(corpus[result[0]])
+
+    return summarizedResult
 
 allDocumentsTraining = readAllTextFiles("TeMário 2006/Originais/")
 allIdealDocumentsTraining = readAllTextFiles("TeMário 2006/SumáriosExtractivos/")
 
+featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
+weights = trainPerceptronModel(featureVecTraining)
+
 allDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
 allIdealDocumentsTest = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
-featureVecTraining = generateTrainingFeatureDocuments(allDocumentsTraining, allIdealDocumentsTraining)
-featureVecTest = generateFeatureDocuments(allDocumentsTest)
-
-perceptronModel(featureVecTraining, featureVecTest)
-
-#blue = 1
-#red = 0
-# trainindData = []
-# trainindData.append(([0,0,0.00392*255],1))
-# trainindData.append(([0,0,0.00392*192],1))
-# trainindData.append(([0.00392*243,0.00392*80,0.00392*59],0))
-# trainindData.append(([0.00392*255,0,0.00392*77],0))
-# trainindData.append(([0.00392*77,0.00392*93,0.00392*190],1))
-# trainindData.append(([0.00392*255,0.00392*98,0.00392*89],0))
-# trainindData.append(([0.00392*208,0,0.00392*49],0))
-# trainindData.append(([0.00392*67,0.00392*15,0.00392*210],1))
-# trainindData.append(([0.00392*82,0.00392*117,0.00392*174],1))
-# trainindData.append(([0.00392*168,0.00392*42,0.00392*89],0))
-# trainindData.append(([0.00392*248,0.00392*80,0.00392*68],0))
-# trainindData.append(([0.00392*128,0.00392*80,0.00392*255],1))
-# trainindData.append(([0.00392*228,0.00392*105,0.00392*116],0))
-#
-#
-# weights = trainModel(trainindData)
-#
-# print(weights)
+evaluateTextSummarizationPerceptron(allDocumentsTest, allIdealDocumentsTest, weights)

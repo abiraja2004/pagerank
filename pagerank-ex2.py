@@ -139,7 +139,7 @@ def simpleTfIdf(documentCorpus):
     termInDocuments = {}
 
     # count of sentences (used in idf calculation)
-    documentN = len(documentCorpus)
+    documentN = len(documentCorpus.values())
 
     documentsWordCounts = generateDocumentWordCountAndVocabulary(documentCorpus, vocabularySet)
     vocabulary = list(vocabularySet)
@@ -482,7 +482,6 @@ def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weigh
 allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
 allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
-evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)

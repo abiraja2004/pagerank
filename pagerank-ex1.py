@@ -195,7 +195,7 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
     return pageRankDict
 
 
-pathToTextFile = "po96fe28-a.txt"
+pathToTextFile = "test.txt"
 text = readTextFile(pathToTextFile)
 corpus = sent_tokenize(text)
 
