@@ -1,14 +1,57 @@
 from collections import Counter
 import math
 import numpy
+import nltk
 from numpy import linalg
+import re
 from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
 
 def readTextFile(filename):
     file = open(filename, "r")
     textData = file.read()
     return textData
+
+def filterTextCorpus(corpus, language):
+
+    filterdCorpus = []
+
+    for sent in corpus:
+        filterdSentence = sent.lower()
+        filterdSentence = re.sub('[^A-Za-z0-9 ]+', '', filterdSentence)
+        filterdSentence = removeStopWords(filterdSentence, language)
+        filterdSentence = stemmSentence(filterdSentence)
+
+        if filterdSentence is "":
+            continue
+
+        filterdCorpus.append(filterdSentence)
+
+    return filterdCorpus
+
+def removeStopWords(sentence, language):
+    stop_words = set(stopwords.words(language))
+    filterdSentence = ""
+
+    wordList = nltk.word_tokenize(sentence)
+
+    for word in wordList:
+        if word not in stop_words and len(word) > 2:
+            word = word.lower()
+            filterdSentence += word + " "
+
+    return filterdSentence
+
+def stemmSentence(sentence):
+    stemmedTokens = ""
+    stemmer = nltk.stem.RSLPStemmer()
+    wordList = nltk.word_tokenize(sentence)
+    for token in wordList:
+        stemmed = stemmer.stem(token)
+        stemmedTokens += stemmed + " "
+
+    return stemmedTokens
 
 def cosineSimilarity(vectorA, vectorB):
     dotResult = numpy.dot(vectorA, vectorB)
@@ -22,12 +65,14 @@ def cosineSimilarity(vectorA, vectorB):
 
     return sim
 
+
 def calcTfArray(termCountDoc, vocabulary):
     tfArray = []
     for vocab in vocabulary:
         tfArray.append(termCountDoc.get(vocab, 0))
 
     return tfArray
+
 
 def calcTfIdfArray(tfArray, vocabulary, termInDocuments, documentN):
     tfdidfArray = []
@@ -38,12 +83,14 @@ def calcTfIdfArray(tfArray, vocabulary, termInDocuments, documentN):
 
     return tfdidfArray
 
+
 def normalizeTermFrequency(wordCounts):
     maxFreq = max(wordCounts.values())
     for key in wordCounts:
         wordCounts[key] /= maxFreq
 
     return wordCounts
+
 
 def generateDocumentVector(document):
     # remove punctuation, lemmatation, stemming
@@ -55,6 +102,7 @@ def generateDocumentVector(document):
 
     return normalizedWordCount
 
+
 def generateDocumentWordCountAndVocabulary(documentCorpus,  vocabularySet):
     documentWordCounts = []
     # generate vocabulary and term count per document
@@ -65,6 +113,7 @@ def generateDocumentWordCountAndVocabulary(documentCorpus,  vocabularySet):
 
     return documentWordCounts
 
+
 def generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocuments):
     # generate term count for all sentences:
     for vocab in vocabulary:
@@ -74,6 +123,7 @@ def generateTermCountsPerDocument(documentsWordCounts, vocabulary, termInDocumen
                 value = value + 1
                 termInDocuments[vocab] = value
 
+
 def generateTfMatrixPerDocument(documentsWordCounts, vocabulary):
     tfMatrix = []
     for counterDoc in documentsWordCounts:
@@ -81,6 +131,7 @@ def generateTfMatrixPerDocument(documentsWordCounts, vocabulary):
         tfMatrix.append(tfArray)
 
     return tfMatrix
+
 
 def generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN):
     tfidfMatrix = {}
@@ -108,18 +159,6 @@ def simpleTfIdf(documentCorpus):
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
     return tfidfMatrix
-
-def invertGraph(graph):
-    invertedGraph = {}
-
-    for key in graph.keys():
-        invertedGraph[key] = []
-
-    for key, values in graph.items():
-        for val in values:
-            invertedGraph[val].append(key)
-
-    return invertedGraph
 
 def compareDifferenceDict(dict1, dict2):
     diffDict = {}
@@ -160,7 +199,6 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
     pageRankDict = {}
     allIterations = []
     allDiffIterations = []
-    invertedGraph = invertGraph(linkGraphDict)
 
     N = len(linkGraphDict.keys())
 
@@ -175,7 +213,7 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
 
             linkSum = 0
             for linkFromNode in values:
-                linkSum = linkSum +  pageRankDict[linkFromNode] / len(invertedGraph[linkFromNode])
+                linkSum = linkSum +  pageRankDict[linkFromNode] / len(linkGraphDict[linkFromNode])
 
             rank = (dampingFactor / N) + (1 - dampingFactor) * linkSum
             pageRankCurIteration[node] = rank
@@ -187,23 +225,20 @@ def pageRank(linkGraphDict, dampingFactor, numberOfIterations):
 
         isConverged = checkConvergence(diffDict, 0.000000001)
         if isConverged:
-            print("Number of iterations to converge: " + str(iteration))
-            return pageRankDict
-        if iteration == 49:
+            #print("Number of iterations to converge: " + str(iteration))
             return pageRankDict
 
     return pageRankDict
 
 
-pathToTextFile = "test.txt"
+pathToTextFile = "trump.txt"
 text = readTextFile(pathToTextFile)
 corpus = sent_tokenize(text)
+filteredCorpus = filterTextCorpus(corpus, "english")
 
-tfidfMatrix = simpleTfIdf(corpus)
-
-simGraph = buildSimilarityGraph(tfidfMatrix, 0.2)
-
-pageRankRes = pageRank(simGraph, 0.15, 1000)
+tfidfMatrix = simpleTfIdf(filteredCorpus)
+simGraph = buildSimilarityGraph(tfidfMatrix, 0.12)
+pageRankRes = pageRank(simGraph, 0.15, 50)
 
 sortedList = sorted(pageRankRes.items(), key=lambda x:x[1],  reverse=True)
 top5Results = sortedList[:5]

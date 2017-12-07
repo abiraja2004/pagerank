@@ -26,18 +26,14 @@ class PriorMethod(Enum):
 def readAllTextFiles(pathToFiles):
     files = glob.glob(pathToFiles + "/*.txt")
     documentTextList = []
-    # iterate over the list getting each file
+
     for file in files:
-        corpus = []
-        # open the file and then call .read() to get the text
         f = open(file)
         text = f.read()
-
         text = text.lower()
 
         # remove newline :
         cText = re.sub('[a-z]\n', '. ', text)
-
         documentTextList.append(cText)
         f.close()
 
@@ -98,7 +94,7 @@ def generateDocumentWordCountAndVocabulary(documentCorpusDict, vocabularySet):
     documentWordCounts = {}
     # generate vocabulary and term count per document
     for id, sentence in documentCorpusDict.items():
-        normalizedWordCount = generateDocumentVector(sentence)
+        normalizedWordCount = generateDocumentVector(sentence, True)
         #normalizedWordCount = generateDocumentVectorImproved(sentence, True)
         vocabularySet.update(normalizedWordCount.keys())
         documentWordCounts[id] = normalizedWordCount
@@ -151,19 +147,6 @@ def simpleTfIdf(documentCorpus):
     # generate tfidf array for each sentence:
     tfidfMatrix = generateTfIdfMatrixPerDocument(tfMatrix, vocabulary, termInDocuments, documentN)
     return tfidfMatrix
-
-
-def invertGraph(graph):
-    invertedGraph = {}
-
-    for key in graph.keys():
-        invertedGraph[key] = []
-
-    for key, values in graph.items():
-        for val in values:
-            invertedGraph[val].append(key)
-
-    return invertedGraph
 
 
 def compareDifferenceDict(dict1, dict2):
@@ -224,8 +207,6 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
     pageRankDict = {}
     allIterations = []
     allDiffIterations = []
-    #invertedGraph = invertGraph(linkGraphDict)
-    invertedGraph = linkGraphDict;
 
     N = len(linkGraphDict.keys())
 
@@ -241,7 +222,7 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
             linkSum = 0
             for edge in edges:
                 edgeSum = 0
-                for edge2 in invertedGraph[edge[0]]:
+                for edge2 in linkGraphDict[edge[0]]:
                     edgeSum = edgeSum + edge2[1]
 
                 linkSum = linkSum + ((pageRankDict[edge[0]] * edge[1]) / edgeSum)
@@ -255,13 +236,12 @@ def pageRank(linkGraphDict, prior, dampingFactor, numberOfIterations):
         allIterations.append(pageRankCurIteration)
         allDiffIterations.append(diffDict)
 
-        isConverged = checkConvergence(diffDict, 0.000000001)
+        isConverged = checkConvergence(diffDict, 0.00000000001)
         if isConverged:
-            print("Number of iterations to converge: " + str(iteration))
-            return pageRankDict
-        if iteration == 49:
+            #print("Number of iterations to converge: " + str(iteration))
             return pageRankDict
 
+    #print("iteration threshhold reached")
     return pageRankDict
 
 
@@ -326,12 +306,10 @@ def generateTfIdfPrior(corpusDict):
 
     # count of sentences (used in idf calculation)
     documentN = len(corpusDict.values())
-
     wordCountDict = generateDocumentWordCountAndVocabulary(corpusDict, vocabularySet)
     vocabulary = list(vocabularySet)
 
     generateTermCountsPerDocument(wordCountDict, vocabulary, termInDocuments)
-
     tfMatrix = generateTfMatrixPerDocument(wordCountDict, vocabulary)
 
     # generate tfidf array for each sentence:
@@ -363,7 +341,6 @@ def evaluateResults(relevantDocument, retrievedDocuments):
         f1 = 0.0
 
     return precision, recall, f1, averagePrecision
-
 
 
 def printEvaluationSummary(evaluationSummary, methodName):
@@ -449,12 +426,12 @@ def summarizeDocument(corpus, edgeWeightMethod, priorMethod , language="portugue
     tfidfMatrix = simpleTfIdf(filteredCorpus)
 
     if edgeWeightMethod == WeightMethod.UNIFORM:
-        simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, False)
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.10, False)
     if edgeWeightMethod == WeightMethod.TFIDF:
-        simGraph = buildSimilarityGraph(tfidfMatrix, 0.14, True)
+        simGraph = buildSimilarityGraph(tfidfMatrix, 0.10, True)
 
 
-    pageRankRes = pageRank(simGraph, prior, 0.15, 1000)
+    pageRankRes = pageRank(simGraph, prior, 0.15, 50)
 
     sortedList = sorted(pageRankRes.items(), key=lambda x: x[1], reverse=True)
     top5Results = sortedList[:5]
@@ -482,6 +459,8 @@ def evaluateTextSummarization(allDocuments, allIdealDocuments, methodName, weigh
 allDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Textos-fonte/Textos-fonte com título/")
 allIdealDocuments = readAllTextFiles("TeMario/TeMario-ULTIMA VERSAO out2004/Sumários/Extratos ideais automáticos/")
 
+evaluateTextSummarization(allDocuments, allIdealDocuments, "uniform weighted - uniform prior page rank", WeightMethod.UNIFORM, PriorMethod.UNIFORM)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - uniform prior page rank", WeightMethod.TFIDF, PriorMethod.UNIFORM)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - pos prior page rank", WeightMethod.TFIDF, PriorMethod.POSITION)
-evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
 evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - tfidf prior page rank", WeightMethod.TFIDF, PriorMethod.TFIDF)
+evaluateTextSummarization(allDocuments, allIdealDocuments, "tfidf weighted - bayes prior page rank", WeightMethod.TFIDF, PriorMethod.BAYES)
